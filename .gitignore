@@ -1,0 +1,17 @@
+# Virtual environment
+.venv/
+
+# Models and vector DB
+models/
+data/chroma_db/
+
+# Logs
+logs/
+
+# Secrets
+.env
+.keys
+
+# Python cache
+__pycache__/
+*.pyc
