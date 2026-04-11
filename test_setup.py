@@ -15,7 +15,7 @@ args = parser.parse_args()
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from config import Config
-from utils import (
+from setup_checks import (
     get_device, 
     check_local_model_exists, 
     create_chromadb_client,

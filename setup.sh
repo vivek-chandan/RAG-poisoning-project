@@ -69,6 +69,8 @@ mkdir -p "$VECTOR_DB_PATH"
 mkdir -p "$SENTENCE_TRANSFORMERS_HOME"
 mkdir -p "$(dirname "$LLAMA_MODEL_PATH")"
 mkdir -p "$(dirname "$LOG_FILE")"
+mkdir -p ./data/legitimate_documents
+mkdir -p ./data/poisoned_documents
 
 # Set local model cache to project directory for self-sustainability
 export SENTENCE_TRANSFORMERS_HOME="$SENTENCE_TRANSFORMERS_HOME"
@@ -148,9 +150,10 @@ echo "1. Activate the virtual environment: source .venv/bin/activate"
 echo "2. Run the test: python3 test_setup.py (--no-local for remote inference only)"
 if [ "$NO_LOCAL" = false ]; then
     echo "3. Run the demo with one of the following options:"
-    echo "   - Local LLM: python3 src/rag_poisoning_demo.py"
-    echo "   - Ollama: python3 src/rag_poisoning_demo.py --infer ollama"
-    echo "   - DeepSeek: python3 src/rag_poisoning_demo.py --infer deepseek"
+    echo "   - Local LLM: python3 src/main.py"
+    echo "   - Ollama: python3 src/main.py --infer ollama"
+    echo "   - DeepSeek: python3 src/main.py --infer deepseek"
+    echo "   - Strict defenses: python3 src/main.py --strict"
     echo ""
     echo "📝 Notes:"
     echo "   - For Ollama: Ensure Ollama is running and configured in .env"
@@ -161,8 +164,9 @@ if [ "$NO_LOCAL" = false ]; then
     echo "   - Configuration: .env (environment variables loaded from this file)"
 else
     echo "3. Run the demo with one of the following options:"
-    echo "   - Ollama: python3 src/rag_poisoning_demo.py --infer ollama"
-    echo "   - DeepSeek: python3 src/rag_poisoning_demo.py --infer deepseek"
+    echo "   - Ollama: python3 src/main.py --infer ollama"
+    echo "   - DeepSeek: python3 src/main.py --infer deepseek"
+    echo "   - Strict defenses: python3 src/main.py --strict"
     echo ""
     echo "📝 Notes:"
     echo "   - Local LLM was skipped (--no-local mode)"

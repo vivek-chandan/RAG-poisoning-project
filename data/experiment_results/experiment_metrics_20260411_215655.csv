@@ -1,0 +1,2 @@
+scenario_id,attack_type,baseline_asr,defended_asr,defense_effectiveness,baseline_contamination,defended_contamination,latency_overhead,defense_precision,defense_recall,diversity_score_baseline,diversity_score_defended
+exp_prompt_injection,prompt_injection,1.0,0.0,1.0,0.333333,0.0,0.022836,1.0,1.0,0.0,1.0

@@ -1,0 +1,13 @@
+{
+  "sources": [
+    {
+      "source_id": "policy_hr_001",
+      "trust_level": "high",
+      "description": "HR policy repository",
+      "public_key_id": "k1",
+      "enabled": true,
+      "created_at": "2026-04-11T21:26:19.625688+00:00",
+      "updated_at": "2026-04-11T21:26:19.625688+00:00"
+    }
+  ]
+}

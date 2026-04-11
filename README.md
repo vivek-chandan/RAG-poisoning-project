@@ -1,198 +1,303 @@
 # RAG Poisoning Project
 
-Research/engineering project exploring **poisoning attacks against Retrieval-Augmented Generation (RAG)** systems and practical defenses. The focus is on how adversarial or low-quality content can enter a RAG knowledge source (documents, vector DB, web crawl, user uploads) and subsequently **influence retrieved context** and model outputs.
+Defensive research project for secure Retrieval-Augmented Generation (RAG) under data poisoning pressure. This repository contains a working, modular implementation with:
 
-> Status: WIP / experimental (expect breaking changes).
+- ingestion and ChromaDB indexing,
+- poisoning attack simulation,
+- layered retrieval defenses,
+- orchestration for secure answer generation,
+- benchmark and experiment tooling.
 
----
-
-## What is “RAG poisoning”?
-
-In a typical RAG pipeline, a system:
-1. collects documents,
-2. chunks them,
-3. embeds chunks into a vector store,
-4. retrieves top-k chunks for a query, and
-5. prompts an LLM with the retrieved context.
-
-**Poisoning** happens when an attacker (or accidental data quality issue) causes harmful / misleading / instruction-like content to be indexed so that it is retrieved and used during generation. This can lead to:
-- misinformation or targeted bias,
-- prompt-injection style instructions inside retrieved text (“ignore previous instructions…”),
-- data exfiltration attempts (“print secrets”), and
-- degraded answer quality.
+This README is aligned with the current codebase and CLI behavior.
 
 ---
 
-## Goals
+## 1. What this project implements
 
-- Implement a baseline RAG pipeline suitable for controlled experiments.
-- Simulate and measure common poisoning strategies (e.g., injected passages, keyword traps, embedding-space manipulation, instruction injection).
-- Provide evaluation harnesses to quantify:
-  - retrieval contamination rate,
-  - attack success rate (ASR),
-  - factuality/faithfulness degradation,
-  - robustness under filtering/defenses.
-- Experiment with defenses (sanitization, ranking-time filters, provenance scoring, chunk-level policies, etc.).
+The code models poisoning as an attack on retrieval context, not model weights.
 
----
+Core workflow:
 
-## Threat model (assumptions)
-
-This project generally assumes:
-- The attacker can introduce content into one of the system’s sources (direct upload, public wiki/web, shared drive, etc.).
-- The model weights are not modified; the attack targets **retrieval + context**.
-- Success is defined as the model producing attacker-desired behavior/content **because poisoned chunks were retrieved**.
-
-Adjust these assumptions to match your deployment context.
+1. Build or load document corpus.
+2. Index into vector store.
+3. Inject poisoned artifacts.
+4. Retrieve candidates for a question.
+5. Apply defenses before generation.
+6. Generate answer with local or remote provider.
+7. Measure contamination, ASR, and defense effectiveness.
 
 ---
 
-## Key ideas & experiments (examples)
+## 2. Current architecture
 
-You can adapt these to whatever you’re implementing in this repo:
+The repository is organized around package-first modules.
 
-### 1) Prompt-injection via retrieved text
-Poisoned chunk contains instruction-like content that tries to override system rules.
+### Runtime pipeline
 
-### 2) Keyword/SEO “trap” poisoning
-Documents are crafted to match many queries and dominate retrieval.
+- `src/main.py`:
+  - CLI entrypoint for secure RAG run.
+  - Supports provider selection and strict defense mode.
+- `src/ingestion/`:
+  - file-system document source and ingestion pipeline.
+- `src/retrieval/`:
+  - embedding providers,
+  - Chroma-backed vector store,
+  - production vector store manager,
+  - secure retriever abstraction.
+- `src/llm/`:
+  - provider implementations (local llama.cpp, Ollama, DeepSeek),
+  - prompt hardening,
+  - response generator,
+  - provider factory.
+- `src/defenses/`:
+  - provenance filtering,
+  - injection pattern defenses,
+  - chunk sanitizer,
+  - security reranker,
+  - diversity enforcer,
+  - context firewall,
+  - provenance tracker.
+- `src/evaluation/`:
+  - metrics and benchmark framework.
 
-### 3) Targeted misinformation
-Poisoned content is inserted for specific entities/topics and only triggers for certain queries.
+### Orchestration and experimentation
 
-### 4) Embedding manipulation (conceptual)
-Adversarial text crafted to land near many query embeddings (implementation depends on embedding model).
+- `src/secure_rag_orchestrator.py`:
+  - defense-first orchestration with 8 stages:
+    1. raw retrieval,
+    2. provenance filtering,
+    3. security reranking,
+    4. diversity enforcement,
+    5. chunk sanitization,
+    6. context firewall,
+    7. prompt hardening,
+    8. LLM generation.
+- `src/attack_simulation_framework.py`:
+  - attack generation and injection flow.
+  - supported attack types:
+    - `prompt_injection`
+    - `keyword_stuffing`
+    - `targeted_misinformation`
+    - `embedding_manipulation_approx`
+- `src/experiment_runner.py`:
+  - baseline vs defended benchmark execution,
+  - CSV/JSON artifact export,
+  - optional plot generation.
+
+### Setup and diagnostics
+
+- `setup.sh`:
+  - bootstraps virtual environment with `uv`, installs dependencies,
+  - downloads embedding model,
+  - optionally downloads local GGUF model.
+- `test_setup.py`:
+  - validates environment, embeddings, Chroma operations, and end-to-end setup checks.
+- `src/setup_checks.py`:
+  - setup-only helper logic, intentionally separated from runtime utils.
 
 ---
 
-## Getting started
+## 3. Requirements
 
-### Prerequisites
-- Python 3.10+ (recommended)
-- An LLM provider (OpenAI / local model) depending on your setup
-- An embeddings model (provider or local)
-- A vector store (FAISS / Chroma / Pinecone / etc.) depending on your setup
+- Python 3.11 recommended.
+- `uv` required by `setup.sh`.
+- Optional inference backends:
+  - local GGUF model for llama.cpp path,
+  - Ollama server for `--infer ollama`,
+  - DeepSeek API key for `--infer deepseek`.
 
-### Setup
+---
+
+## 4. Quick start
+
+### Option A: one-command setup script (recommended)
 
 ```bash
-# (Optional) create venv
-python -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
+chmod +x setup.sh
+./setup.sh --no-local
+```
 
-# install deps (adjust to your repo)
+Use `--no-local` when you do not want to download the local LLM model.
+
+### Option B: manual setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-If your repository uses Poetry or uv instead, replace the above accordingly.
+---
 
-### Configure environment
+## 5. Configuration
 
-Create a `.env` (or export env vars) as needed, e.g.:
+Configuration is loaded from environment variables, `.env`, and optional `.keys`.
+
+Key variables used by the code:
+
+- `EMBEDDING_MODEL` (default: `sentence-transformers/all-MiniLM-L6-v2`)
+- `VECTOR_DB_PATH` (default: `./data/chroma_db`)
+- `LLAMA_MODEL_PATH` (default: `./models/llm/Phi-3.5-mini-instruct.Q4_K_M.gguf`)
+- `SENTENCE_TRANSFORMERS_HOME` (default: `./models/embedding`)
+- `TRANSFORMERS_CACHE` (default: `./models/embedding`)
+- `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` (default: `Phi-3.5-mini-instruct:latest`)
+- `DEEPSEEK_MODEL` (default: `deepseek-chat`)
+- `DEEPSEEK_API_KEY` (default: empty)
+- `TOP_K_RETRIEVAL` (default: `3`)
+- `SIMILARITY_THRESHOLD` (default: `0.0`)
+- `LOG_LEVEL` (default: `WARN`)
+- `LOG_FILE` (default: `./logs/rag_demo.log`)
+
+Telemetry note:
+
+- Chroma anonymized telemetry is disabled by default in code and noisy telemetry logger output is suppressed.
+
+---
+
+## 6. CLI reference
+
+### 6.1 Setup verification
 
 ```bash
-# Example only — adjust to your stack
-OPENAI_API_KEY=...
-EMBEDDING_MODEL=...
-LLM_MODEL=...
-VECTOR_DB_PATH=./data/vector_store
+python3 test_setup.py --no-local
 ```
 
----
+What it checks:
 
-## How to run (fill in with actual commands)
+- config load,
+- embedding model availability and encoding,
+- Chroma read/write/query,
+- end-to-end baseline and defended poisoning behavior.
 
-Because repo layouts differ, here are common entry points. Replace with the real scripts/modules in this project:
+### 6.2 Secure pipeline run
 
-### 1) Ingest documents
 ```bash
-python -m rag_poisoning.ingest --input ./data/docs --out ./data/index
+python3 src/main.py
+python3 src/main.py --question "What is our vacation policy?"
+python3 src/main.py --infer ollama
+python3 src/main.py --infer deepseek
+python3 src/main.py --strict
 ```
 
-### 2) Build / update vector index
+CLI flags:
+
+- `--question`: query string.
+- `--infer`: one of `local`, `ollama`, `deepseek`.
+- `--strict`: enables stricter provenance filtering.
+- `--no-local-fallback`: fail fast for local provider if model load/generation fails.
+
+Strict local behavior example:
+
 ```bash
-python -m rag_poisoning.index --index ./data/index
+python3 src/main.py --infer local --no-local-fallback
 ```
 
-### 3) Query the RAG system
+Without `--no-local-fallback`, missing local model falls back to deterministic fallback text.
+
+### 6.3 Experiment runner
+
 ```bash
-python -m rag_poisoning.query --question "..." --top_k 5
+python3 src/experiment_runner.py --attacks prompt_injection --no-plot
+python3 src/experiment_runner.py --attacks prompt_injection,keyword_stuffing --llm-provider ollama
+python3 src/experiment_runner.py --attacks targeted_misinformation,embedding_manipulation_approx
 ```
 
-### 4) Run poisoning experiment suite
+CLI flags:
+
+- `--attacks`: comma-separated attack names.
+- `--top-k`: retrieval depth for benchmark (default `5`).
+- `--output-dir`: artifact directory (default `./data/experiment_results`).
+- `--llm-provider`: `local`, `ollama`, `deepseek`.
+- `--no-local-fallback`: strict fail-fast local mode in defended path.
+- `--no-plot`: skip PNG generation.
+
+Experiment strict local example:
+
 ```bash
-python -m rag_poisoning.experiments.run --suite baseline
+python3 src/experiment_runner.py --attacks prompt_injection --no-local-fallback --no-plot
 ```
 
-### 5) Evaluate
+If local model is missing and strict mode is enabled, benchmark exits non-zero.
+
+---
+
+## 7. Outputs and artifacts
+
+Generated files are written under `data/`:
+
+- vector DB persistence: `data/chroma_db/`
+- sample corpus:
+  - `data/legitimate_documents/`
+  - `data/poisoned_documents/`
+- experiment artifacts:
+  - `data/experiment_results/experiment_metrics_<timestamp>.csv`
+  - `data/experiment_results/experiment_report_<timestamp>.json`
+  - optional `data/experiment_results/attack_success_vs_defense_<timestamp>.png`
+
+---
+
+## 8. Interpreting results
+
+Important reported signals:
+
+- retrieval contamination rate,
+- baseline ASR vs defended ASR,
+- defense effectiveness,
+- latency overhead,
+- precision/recall-like defense metrics,
+- diversity score changes.
+
+Typical expected pattern in successful defense run:
+
+- baseline contamination/ASR higher,
+- defended contamination/ASR lower,
+- some latency overhead introduced by defense stages.
+
+---
+
+## 9. Troubleshooting
+
+### Local model missing
+
+Symptom:
+
+- local provider logs model path not found.
+
+Resolution:
+
+- run setup without `--no-local`, or
+- set valid `LLAMA_MODEL_PATH`, or
+- use `--infer ollama` / `--infer deepseek`.
+
+### Want hard failure instead of fallback
+
+- add `--no-local-fallback` to `src/main.py` or `src/experiment_runner.py`.
+
+### ONNX runtime device warning
+
+- non-fatal in many container environments; does not block execution.
+
+---
+
+## 10. Security and ethics
+
+This repository is for defensive security research and robustness evaluation. Only test systems you own or are explicitly authorized to test.
+
+---
+
+## 11. Current status
+
+Implemented and runnable:
+
+- secure RAG CLI pipeline,
+- setup verification tooling,
+- poisoning simulation framework,
+- defense orchestrator,
+- benchmark runner with export artifacts.
+
+Recommended first validation command:
+
 ```bash
-python -m rag_poisoning.eval --run_id <ID>
+python3 test_setup.py --no-local
 ```
-
----
-
-## Evaluation
-
-Suggested metrics (use whichever are implemented here):
-- **Retrieval contamination rate**: fraction of retrieved chunks that are poisoned.
-- **Attack Success Rate (ASR)**: fraction of queries where output matches attacker goal.
-- **Faithfulness / groundedness**: whether output is supported by safe context.
-- **Robustness**: performance under defenses (filters/rerankers/policies).
-
----
-
-## Defenses to explore
-
-Potential defenses you might implement/compare:
-- **Chunk sanitization**: strip or down-rank instruction-like patterns.
-- **Provenance & allowlists**: only retrieve from trusted sources or signed documents.
-- **Reranking with safety criteria**: use a reranker that penalizes injection patterns.
-- **Context firewall**: classify retrieved text; block or mask unsafe segments.
-- **Prompt hardening**: explicitly instruct model to treat retrieved text as untrusted.
-- **Diversity constraints**: avoid dominance of a single source/domain.
-- **Continuous monitoring**: detect drift in retrieval distribution.
-
----
-
-## Project structure (update to match repo)
-
-Example layout:
-
-```text
-.
-├─ data/
-├─ notebooks/
-├─ src/ or rag_poisoning/
-├─ tests/
-├─ requirements.txt / pyproject.toml
-└─ README.md
-```
-
----
-
-## Safety & ethics
-
-This repository is intended for **defensive research and robustness testing**. Do not deploy poisoning techniques against systems you do not own or have explicit permission to test.
-
-If you publish results, clearly describe the threat model and limitations.
-
----
-
-## Contributing
-
-- Issues and PRs welcome.
-- Please include reproducible steps and logs for bugs.
-- Add tests for new features where possible.
-
----
-
-## License
-
-Add a license file (e.g., MIT/Apache-2.0) and update this section.
-
----
-
-## Citation
-
-If you use this work in academic or public research, consider adding a `CITATION.cff` or BibTeX entry here.
